@@ -197,3 +197,424 @@ public class HelloShiro {
 }
 ```
 
+## 9. 多个realm的认证策略设置
+
+### 多个realm实现原理
+
+当应用程序配置多个 Realm 时，例如：用户名密码校验、手机号验证码校验等等。 Shiro 的 ModularRealmAuthenticator 会使用内部的 AuthenticationStrategy 组件判断认 证是成功还是失败。 
+
+AuthenticationStrategy 是一个无状态的组件，它在身份验证尝试中被询问 4 次（这 4 次交互所需的任何必要的状态将被作为方法参数）： 
+
+（1）在所有 Realm 被调用之前 
+
+（2）在调用 Realm 的 getAuthenticationInfo 方法之前 
+
+（3）在调用 Realm 的 getAuthenticationInfo 方法之后 
+
+（4）在所有 Realm 被调用之后 认证策略的另外一项工作就是聚合所有 Realm 的结果信息封装至一个 AuthenticationInfo 实例中，并将此信息返回，以此作为 Subject 的身份信息。
+
+Shiro中定义了三种认证策略：
+
+| AuthenticationStrategy class | 描述                                                         |
+| ---------------------------- | ------------------------------------------------------------ |
+| AtLeastOneSuccessfulStrategy | 只要有一个（或更多）的 Realm 验证成功，那么认证将视为成功    |
+| FirstSuccessfulStrategy      | 第一个 Realm 验证成功，整体认证将视为成功，且后续 Realm 将被忽略 |
+| AllSuccessfulStrategy        | 所有 Realm 成功，认证才视为成功                              |
+
+ModularRealmAuthenticator 内置的认证策略默认实现是 AtLeastOneSuccessfulStrategy 方式。可以通过配置修改策略。
+
+## 10. 记住我功能
+
+Shiro 提供了记住我（RememberMe）的功能，比如访问一些网站时，关闭了浏览器， 下次再打开时还是能记住你是谁， 下次访问时无需再登录即可访问。
+
+基本流程:
+
+（1） 首先在登录页面选中 RememberMe 然后登录成功；如果是浏览器登录，一般会 把 RememberMe 的 Cookie 写到客户端并保存下来； 
+
+（2） 关闭浏览器再重新打开；会发现浏览器还是记住你的； 
+
+（3） 访问一般的网页服务器端，仍然知道你是谁，且能正常访问； 
+
+（4） 但是，如果我们访问电商平台时，如果要查看我的订单或进行支付时，此时还 是需要再进行身份认证的，以确保当前用户还是你。
+
+```java
+//5 设置 rememberMe
+defaultWebSecurityManager.setRememberMeManager(rememberMeManager());
+
+
+//cookie 属性设置
+ public SimpleCookie rememberMeCookie(){
+ 	SimpleCookie cookie = new SimpleCookie("rememberMe");
+ 	//设置跨域
+ 	//cookie.setDomain(domain);
+ 	cookie.setPath("/");
+ 	cookie.setHttpOnly(true);
+ 	cookie.setMaxAge(30*24*60*60);
+ 	return cookie;
+ }
+ //创建 Shiro 的 cookie 管理对象
+ public CookieRememberMeManager rememberMeManager(){
+ 	CookieRememberMeManager cookieRememberMeManager = new CookieRememberMeManager();
+ 	cookieRememberMeManager.setCookie(rememberMeCookie());
+	cookieRememberMeManager.setCipherKey("1234567890987654".getBytes());
+ 	return cookieRememberMeManager;
+ }
+
+
+//配置 Shiro 内置过滤器拦截范围
+ @Bean
+ public DefaultShiroFilterChainDefinition shiroFilterChainDefinition(){
+ 	DefaultShiroFilterChainDefinition definition = new DefaultShiroFilterChainDefinition();
+ 	//设置不认证可以访问的资源
+ 	definition.addPathDefinition("/myController/userLogin","anon");
+ 	definition.addPathDefinition("/myController/login","anon");
+	//设置需要进行登录认证的拦截范围
+ 	definition.addPathDefinition("/**","authc");
+ 	//添加存在用户的过滤器（rememberMe）
+ 	definition.addPathDefinition("/**","user");
+ 	return definition;
+ }
+
+（2）修改 controller
+//登录认证
+@GetMapping("userLogin")
+public String userLogin(String name, String pwd,@RequestParam(defaultValue = "false")boolean rememberMe, HttpSession session){
+ 	//1 获取 Subject 对象
+ 	Subject subject = SecurityUtils.getSubject();
+ 	//2 封装请求数据到 token 对象中
+ 	AuthenticationToken token = new UsernamePasswordToken(name,pwd,rememberMe);
+ 	//3 调用 login 方法进行登录认证
+ 	try {
+ 		subject.login(token);
+ 		session.setAttribute("user",token.getPrincipal().toString());
+ 		return "main";
+ 	} catch (AuthenticationException e) {
+ 		e.printStackTrace();
+ 		System.out.println("登录失败");
+ 		return "登录失败";
+ 	}
+}
+//登录认证验证 rememberMe
+@GetMapping("userLoginRm")
+public String userLogin(HttpSession session) {
+ 	session.setAttribute("user","rememberMe");
+ 	return "main";
+}
+
+```
+
+## 11. 登出操作
+
+直接通过Shiro过滤器即可实现登出
+
+```java
+//配置 Shiro 内置过滤器拦截范围
+@Bean
+public DefaultShiroFilterChainDefinition shiroFilterChainDefinition(){
+ 	DefaultShiroFilterChainDefinition definition = new 
+	DefaultShiroFilterChainDefinition();
+ 	//设置不认证可以访问的资源
+ 	definition.addPathDefinition("/myController/userLogin","anon");
+ 	definition.addPathDefinition("/myController/login","anon");
+ 	//配置登出过滤器
+ 	definition.addPathDefinition("/logout","logout");
+ 	//设置需要进行登录认证的拦截范围
+ 	definition.addPathDefinition("/**","authc");
+ 	//添加存在用户的过滤器（rememberMe）
+ 	definition.addPathDefinition("/**","user");
+ 	return definition;
+}
+
+```
+
+## 12. 授权、角色认证
+
+### 授权
+
+用户登录后，需要验证是否具有指定角色指定权限。Shiro也提供了方便的工具进行判 断。 这个工具就是Realm的doGetAuthorizationInfo方法进行判断。
+
+触发权限判断的有两种方式 （1） 在页面中通过shiro:   属性判断 （2） 在接口服务中通过注解：@Requires进行判断
+
+### 后端接口服务注解
+
+通过给接口服务方法添加注解可以实现权限校验，可以加在控制器方法上，也可以加 在业务方法上，一般加在控制器方法上。常用注解如下： 
+
+**（1）@RequiresAuthentication**  
+
+验证用户是否登录，等同于方法subject.isAuthenticated() 
+
+**（2）@RequiresUser**  
+
+验证用户是否被记忆： 
+
+登录认证成功subject.isAuthenticated()为true 
+
+登录后被记忆subject.isRemembered()为true 
+
+**（3）@RequiresGuest** 
+
+ 验证是否是一个guest的请求，是否是游客的请求
+
+此时subject.getPrincipal()为null 
+
+**（4）@RequiresRoles**  
+
+验证subject是否有相应角色，有角色访问方法，没有则会抛出异常 AuthorizationException。 
+
+例如：@RequiresRoles(“aRoleName”) 
+
+void someMethod(); 
+
+只有subject有aRoleName角色才能访问方法someMethod() 
+
+**（5）@RequiresPermissions** 
+
+ 验证subject是否有相应权限，有权限访问方法，没有则会抛出异常 AuthorizationException。
+
+ 例如：@RequiresPermissions (“file:read”,”wite:aFile.txt”) 
+
+void someMethod(); subject必须同时含有file:read和wite:aFile.txt
+
+权限才能访问方法someMethod()
+
+### 授权验证-没有角色无法访问
+
+```java
+（1）添加 controller 方法，并添加验证角色注解
+//登录认证验证角色
+@RequiresRoles("admin")
+@GetMapping("userLoginRoles")
+@ResponseBody
+public String userLoginRoles() {
+ 	System.out.println("登录认证验证角色");
+ 	return "验证角色成功";
+}
+
+
+（2）修改 main.html
+<body>
+ <h1>Shiro 登录认证后主页面</h1>
+ <br>
+ 登录用户为：<span th:text="${session.user}"></span>
+ <br>
+ <a href="/logout">登出</a>
+<br>
+ <a href="/myController/userLoginRoles">测试授权</a>
+</body>
+     
+（3）修改 MyRealm 方法
+//自定义授权方法：获取当前登录用户权限信息，返回给 Shiro 用来进行授权对比
+@Override
+protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principalCollection) {
+ 	System.out.println("进入自定义授权方法");
+ 	return null;
+}
+```
+
+### 授权验证-获取角色进行验证
+
+```java
+mapper 方法
+@Repository
+public interface UserMapper extends BaseMapper<User> {
+ 	@Select("SELECT NAME FROM role WHERE id IN (SELECT rid FROM role_user WHERE uid=(SELECT id FROM USER WHERE NAME=#{principal}))")
+ 	List<String> getUserRoleInfoMapper(@Param("principal") String principal);
+}
+
+service 实现
+//获取用户的角色信息
+@Override
+public List<String> getUserRoleInfo(String principal) {
+ 	return userMapper.getUserRoleInfoMapper(principal);
+}
+MyRealm 方法改造
+    
+//自定义授权方法：获取当前登录用户权限信息，返回给 Shiro 用来进行授权对比
+@Override
+protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principalCollection) {
+ 	System.out.println("进入自定义授权方法");
+ 	//获取当前用户身份信息
+ 	String principal = principalCollection.getPrimaryPrincipal().toString();
+ 	//调用接口方法获取用户的角色信息
+ 	List<String> roles = userService.getUserRoleInfo(principal);
+ 	System.out.println("当前用户角色信息："+roles);
+ 	//创建对象，存储当前登录的用户的权限和角色
+ 	SimpleAuthorizationInfo info = new SimpleAuthorizationInfo();
+ 	//存储角色
+ 	info.addRoles(roles);
+ 	//返回
+ 	return info;
+}
+```
+
+**授权验证-获取权限进行验证**
+
+```java
+mapper 方法
+ @Select({
+ "<script>",
+ "select info FROM permissions WHERE id IN ",
+ "(SELECT pid FROM role_ps WHERE rid IN (",
+ "SELECT id FROM role WHERE NAME IN ",
+ "<foreach collection='roles' item='name' open='(' separator=',' close=')'>",
+ "#{name}",
+ "</foreach>",
+ "))",
+ "</script>"
+})
+List<String> getUserPermissionInfoMapper(@Param("roles")List<String> roles);
+
+
+service 实现
+//获取用户角色的权限信息
+@Override
+public List<String> getUserPermissionInfo(List<String> roles) {
+ 	return userMapper.getUserPermissionInfoMapper(roles);
+}
+
+
+MyRealm 方法改造
+//自定义授权方法：获取当前登录用户权限信息，返回给 Shiro 用来进行授权对比
+@Override
+protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principalCollection) {
+ 	System.out.println("进入自定义授权方法");
+ 	//获取当前用户身份信息
+ 	String principal = principalCollection.getPrimaryPrincipal().toString();
+ 	//调用接口方法获取用户的角色信息
+ 	List<String> roles = userService.getUserRoleInfo(principal);
+ 	System.out.println("当前用户角色信息："+roles);
+ 	//调用接口方法获取用户角色的权限信息
+ 	List<String> permissions = userService.getUserPermissionInfo(roles);
+ 	System.out.println("当前用户权限信息："+permissions);
+ 	//创建对象，存储当前登录的用户的权限和角色
+ 	SimpleAuthorizationInfo info = new SimpleAuthorizationInfo();
+ 	//存储角色
+ 	info.addRoles(roles);
+ 	//存储权限信息
+ 	info.addStringPermissions(permissions);
+ 	//返回
+ 	return info;
+}
+
+添加 controller 方法
+//登录认证验证权限
+@RequiresPermissions("user:delete")
+@GetMapping("userPermissions")
+@ResponseBody
+public String userLoginPermissions() {
+ 	System.out.println("登录认证验证权限");
+ 	return "验证权限成功";
+}
+
+改造 main.html
+<body>
+ <h1>Shiro 登录认证后主页面</h1>
+ <br>
+ 登录用户为：<span th:text="${session.user}"></span>
+ <br>
+ <a href="/logout">登出</a>
+ <br>
+ <a href="/myController/userLoginRoles">测试授权-角色验证</a>
+ <br>
+ <a href="/myController/userPermissions">测试授权-权限验证</a>
+</body>
+```
+
+### 授权验证-异常处理
+
+（1）创建认证异常处理类，使用@ControllerAdvice 加@ExceptionHandler 实现特殊异 常处理。
+
+```java
+@ControllerAdvice
+public class PermissionsException {
+ 	@ResponseBody
+ 	@ExceptionHandler(UnauthorizedException.class)
+ 	public String unauthorizedException(Exception ex){
+ 		return "无权限";
+ 	}
+ 	@ResponseBody
+ 	@ExceptionHandler(AuthorizationException.class)
+ 	public String authorizationException(Exception ex){
+ 		return "权限认证失败";
+ 	}
+}
+```
+
+Thymeleaf 中常用的 shiro:属性
+
+**guest 标签**
+
+ `<shiro:guest> </shiro:guest>`
+
+ 用户没有身份验证时显示相应信息，即游客访问信息。 
+
+**user 标签** 
+
+ `<shiro:user> </shiro:user>`
+
+用户已经身份验证/记住我登录后显示相应的信息。 
+
+**authenticated 标签**  
+
+`<shiro:authenticated> </shiro:authenticated>`
+
+用户已经身份验证通过，即 Subject.login 登录成功，不是记住我登录的。 
+
+**notAuthenticated 标签**  
+
+`<shiro:notAuthenticated> </shiro:notAuthenticated>`
+用户已经身份验证通过，即没有调用 Subject.login 进行登录，包括记住我自动登录的 也属于未进行身份验证。 
+
+**principal 标签**  
+
+`<shiro: principal/> <shiro:principal property="username"/>`
+
+相当于((User)Subject.getPrincipals()).getUsername()。
+
+**lacksPermission 标签** 
+
+`<shiro:lacksPermission name="org:create"> </shiro:lacksPermission>` 
+
+如果当前 Subject 没有权限将显示 body 体内容。 
+
+**hasRole 标签**  
+
+`<shiro:hasRole name="admin"> </shiro:hasRole>`
+
+如果当前 Subject 有角色将显示 body 体内容。 
+
+**hasAnyRoles 标签**  
+
+`<shiro:hasAnyRoles name="admin,user"> </shiro:hasAnyRoles>`
+
+如果当前 Subject 有任意一个角色（或的关系）将显示 body 体内容。 
+
+**lacksRole 标签**  
+
+`<shiro:lacksRole name="abc"> </shiro:lacksRole>`
+
+如果当前 Subject 没有角色将显示 body 体内容。 
+
+**hasPermission 标签**  
+
+`<shiro:hasPermission name="user:create"> </shiro:hasPermission>`
+
+如果当前 Subject 有权限将显示 body 体内容
+
+ 
+
+修改前端代码
+
+```html
+改造 main.html
+
+<body>
+ <h1>Shiro 登录认证后主页面</h1><br>
+ 登录用户为：<span th:text="${session.user}"></span><br>
+ <a href="/logout">登出</a><br>
+ <a shiro:hasRole="admin" href="/myController/userLoginRoles">测试授权-角色验证</a><br>
+ <a shiro:hasPermission="user:delete" 
+href="/myController/userPermissions">测试授权-权限验证</a>
+</body>
+```
+

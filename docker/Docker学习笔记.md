@@ -647,3 +647,60 @@ test.java
    ![](./pic/20200812111035666.png)
 
 部署后可以通过http://192.168.109.100:3344/来访问
+
+### docker安装tomcat
+
+```shell
+# 官方的使用
+docker run -it --rm tomcat:9.0
+ 
+# 我们之前的启动都是后台的，停止了容器之后， 容器还是可以查到，docker run -it --rm 一般用来测试，用完就删
+ 
+# 下载再启动
+docker pull tomcat
+ 
+# 启动运行
+docker run -d -p 3355:8080 --name tomcat01 tomcat
+ 
+# 测试访问没有问题
+ 
+# 进入容器
+docker exec -it tomcat01 /bin/bash
+ 
+# 发现问题：1.linux命令少了， 2. webapps下内容为空，阿里云净吸纳过默认是最小的镜像，所有不必要的都剔除了，保证最小可运行环境即可
+
+我们可以进入容器后，将webapps.dist中的文件复制到webapps里，然后关闭防火墙。就可以通过本机访问了
+
+```
+
+## 7. Docker镜像原理
+
+UnionFS 联合文件系统是一种分层、轻量级并且高性能的文件系统，它支持对文件系统的修改，作为一次提交来一层层的叠加，同时可以将不同目录挂在到同一个虚拟文件系统下。
+
+
+
+docker镜像加载
+
+- 实际上由一层一层的文件系统（UnionFs）组成
+- bootfs：BootLoader + kernel，BootLoader主要是引导kernel
+- rootfs：bootfs之上。
+
+![](./pic/docker01.png)
+
+doker的镜像都是只读的，当容器启动时，一个新的可写层被加载到镜像的顶部，这就是我们通常说的容器层，容器层之下的都叫做镜像层。
+
+![](./pic/2020081215123458.png)
+
+## 8. commit镜像
+
+```shell
+docker commit 提交容器成为一个新的版本
+docker commit -m="提交的描述信息" -a="作者" 容器id 目标镜像名
+```
+
+将我们自己的容器通过commit提交到一个镜像，以后我们用自己的镜像就可以了。
+
+
+
+弱小和无知不是生存的障碍，傲慢才是。
+

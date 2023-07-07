@@ -599,7 +599,7 @@ test.java
 
 ##  6. 练习
 
-### docke安装部署nginx
+### docker安装部署nginx
 
 1. 搜索镜像   search    建议到docker hub上搜索
 
@@ -647,3 +647,12 @@ test.java
    ![](./pic/20200812111035666.png)
 
 部署后可以通过http://192.168.109.100:3344/来访问
+
+### docker安装部署tomcat
+
+搜索镜像
+
+安装镜像
+
+启动运行
+

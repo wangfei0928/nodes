@@ -648,6 +648,7 @@ test.java
 
 部署后可以通过http://192.168.109.100:3344/来访问
 
+
 ### docker安装部署tomcat
 
 搜索镜像
@@ -655,4 +656,273 @@ test.java
 安装镜像
 
 启动运行
+
+### docker安装tomcat
+
+```shell
+# 官方的使用
+docker run -it --rm tomcat:9.0
+ 
+# 我们之前的启动都是后台的，停止了容器之后， 容器还是可以查到，docker run -it --rm 一般用来测试，用完就删
+ 
+# 下载再启动
+docker pull tomcat
+ 
+# 启动运行
+docker run -d -p 3355:8080 --name tomcat01 tomcat
+ 
+# 测试访问没有问题
+ 
+# 进入容器
+docker exec -it tomcat01 /bin/bash
+ 
+# 发现问题：1.linux命令少了， 2. webapps下内容为空，阿里云净吸纳过默认是最小的镜像，所有不必要的都剔除了，保证最小可运行环境即可
+
+我们可以进入容器后，将webapps.dist中的文件复制到webapps里，然后关闭防火墙。就可以通过本机访问了
+
+```
+
+## 7. Docker镜像原理
+
+UnionFS 联合文件系统是一种分层、轻量级并且高性能的文件系统，它支持对文件系统的修改，作为一次提交来一层层的叠加，同时可以将不同目录挂在到同一个虚拟文件系统下。
+
+
+
+docker镜像加载
+
+- 实际上由一层一层的文件系统（UnionFs）组成
+- bootfs：BootLoader + kernel，BootLoader主要是引导kernel
+- rootfs：bootfs之上。
+
+![](./pic/docker01.png)
+
+doker的镜像都是只读的，当容器启动时，一个新的可写层被加载到镜像的顶部，这就是我们通常说的容器层，容器层之下的都叫做镜像层。
+
+![](./pic/2020081215123458.png)
+
+## 8. commit镜像
+
+```shell
+docker commit 提交容器成为一个新的版本
+docker commit -m="提交的描述信息" -a="作者" 容器id 目标镜像名
+```
+
+将我们自己的容器通过commit提交到一个镜像，以后我们用自己的镜像就可以了。
+
+## 9. 容器数据卷
+
+什么是容器数据卷
+
+docker就是将应用和环境打包成一个镜像。如果数据都在容器中，如果我们将容器删除，数据就会丢失。为了解决这个问题，就产生了docker数据卷，就是让容器中的数据可以持久化和同步，容器间的数据共享。其实就是目录的挂在，将我们容器中的目录，挂在到Linux上。
+
+![](D:\笔记\docker\pic\8fcb18993b38475bbb2e6a75d65129a0.png)
+
+
+
+### 使用数据卷
+
+#### 方式一：直接使用命令来挂载  -v
+
+```shell
+docker run -it -v 主机目录：容器内目录
+
+docker run -it -v /home/ceshi:/home centos /bin/bash
+
+```
+
+启动之后，可以通过`docker inspect 容器id`查看是否挂在成功。
+
+![](D:\笔记\docker\pic\QQ截图20230709222039.png)
+
+
+
+同步的过程，双向绑定，测试文件的同步
+
+![](D:\笔记\docker\pic\QQ截图20230709222039.png)
+
+再来测试
+
+1. 停止容器
+2. 在宿主主机上修改文件
+3. 启动容器
+4. 容器内的数据依旧是同步的
+
+![](D:\笔记\docker\pic\QQ截图20230709222746.png)
+
+好处：以后修改只需要在本地修改即可，容器内会自动同步。
+
+### 实战：安装Mysql
+
+思考：Mysql的数据持久化的问题
+
+获取镜像
+
+```shell
+docker pull mysql:5.7
+```
+
+运行容器时进行数据挂载
+
+```shell
+# 安装mysql需要配置密码的！！！
+# 官方测试: docker -run --name some-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -d mysql:tag
+
+-d 后台运行
+-p 暴露端口 端口映射
+-v 卷挂载
+-e 环境配置
+--name  容器名字
+
+docker run -d -p 3310:3306 -v /home/mysql/conf:/etc/mysql/conf.d -v /home/mysql/data:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 --name mysql01 mysql:5.7
+```
+
+用navicat进行远程测试，记得关闭防火墙，打开ssh连接
+
+遇到的的问题：
+
+启动时报错:
+
+```shell
+[ERROR] InnoDB: Write to file ./ibdata1 failed at offset 0, 1048576 bytes should have been written, only 0 were written. Operating system error number 28. Check that your OS and file system support files of this size. Check also that the disk is not full or a disk quota exceeded.
+[ERROR] InnoDB: Error number 28 means 'No space left on device'
+[ERROR] InnoDB: Could not set the file size of './ibdata1'. Probably out of disk space
+[ERROR] InnoDB: InnoDB Database creation was aborted with error Generic error. You may need to delete the ibdata1 file before trying to start up again.
+```
+
+根据错误消息，问题可能是由于磁盘空间不足引起的。InnoDB存储引擎无法写入数据库文件（`ibdata1`）并报告 "No space left on device" 错误。
+
+要清理根文件系统上的不需要文件以释放磁盘空间，可以执行以下操作：
+
+1. **查找大文件**：首先，通过使用 `du` 命令来查找占用较大空间的文件和目录。运行以下命令以按照文件大小的递减顺序列出文件和目录的大小：
+
+   ```
+   bashCopy code
+   du -h --max-depth=1 / | sort -hr
+   ```
+
+   这将列出根文件系统中的文件和目录，按照大小的递减顺序显示。你可以查看列表并找出占用较大空间的文件或目录。
+
+2. **删除不需要的文件**：根据上一步中找到的大文件或目录，确定哪些是不再需要的文件。使用 `rm` 命令来删除不需要的文件。请注意，在删除文件之前，确保你确定这些文件不再需要，并且它们不会对系统或应用程序造成影响。例如，可以使用以下命令删除单个文件：
+
+   ```
+   bashCopy code
+   rm /path/to/file
+   ```
+
+   或者，如果要删除整个目录及其内容，请使用以下命令（谨慎使用）：
+
+   ```
+   bashCopy code
+   rm -rf /path/to/directory
+   ```
+
+   请注意，`rm -rf` 命令会无条件地删除目录及其内容，因此请确保你删除的是正确的目录。
+
+3. **清理日志文件**：另一个常见的空间占用问题是日志文件。检查 `/var/log/` 目录中的日志文件，并删除不再需要的日志文件。你可以使用以下命令来删除日志文件：
+
+   ```
+   bashCopy code
+   rm /var/log/file.log
+   ```
+
+   或者，如果要删除整个目录中的日志文件，请使用以下命令（谨慎使用）：
+
+   ```
+   bashCopy code
+   rm -rf /var/log/directory
+   ```
+
+   请确保你只删除不再需要的日志文件。
+
+通过执行这些操作，你应该能够释放一些根文件系统的磁盘空间。请注意，清理文件时要小心，确保你只删除不再需要的文件，并且不会对系统或应用程序造成影响。
+
+
+
+最后删除了/home/mysql目录，重新运行容器，成功！！！
+
+
+
+### 具名挂载和匿名挂载
+
+匿名挂载： -v 后直接写容器内路径
+
+```shell
+# 匿名挂载
+-v 容器内路径！
+docker run -d -p --name nginx01 -v /etc/nginx nginx
+
+# 查看所有卷的情况
+docker volume ls
+
+# 这里发现，这种就是匿名挂载，我们在 -v 只写了容器内的路径，没有写容器外的路径！
+
+# 具名挂载
+a2006ca23ff80dd99855f53ae239f1e9b1ee070079bda2d03ade21be3bbd863d
+ ⚡ root@VM-12-13-centos  /  docker run -d -P --name nginx002 -v juming-nginx:/etc/nginx nginx
+6950de23be75a77fb315ea738a4b448bcd0618326fdcec7aabd4e54e9e3c4d59
+ ⚡ root@VM-12-13-centos  /  docker volume ls                                                 
+DRIVER    VOLUME NAME
+local     juming-nginx
+
+# 通过 -v 卷名:容器内路径
+# 查看卷名所在位置
+⚡ root@VM-12-13-centos  /  docker volume inspect juming-nginx
+[
+    {
+        "CreatedAt": "2022-11-17T16:33:24+08:00",
+        "Driver": "local",
+        "Labels": null,
+        "Mountpoint": "/var/lib/docker/volumes/juming-nginx/_data",
+        "Name": "juming-nginx",
+        "Options": null,
+        "Scope": "local"
+    }
+]
+
+
+```
+
+所有的docker容器内的卷，没有指定目录的情况下都是在/var/lib/docker/volumes/_data
+
+通过具名挂载可以方便我们找到这个卷。大多数情况使用具名挂载
+
+如何确定是具名挂载还是匿名挂载，还是指定路径挂载！
+
+-v 容器内路径 		 # 匿名挂载
+-v 卷名:容器内路径		# 具名挂载
+-v /宿主机路径:容器内路径  # 
+
+
+
+拓展
+
+```shell
+通过 -v 容器内路径:ro  rw可以改变我们的读写权限
+
+ro  readonly  # 只读
+rw  readwrite  # 可读可写 (默认)
+
+一旦设定这个容器的权限，容器对我们挂载出来的内容就是有权限了！
+
+docker run -d -P --name nginx02 -v juming-nginx:/etc/nginx:ro nginx
+docker run -d -P --name nginx02 -v juming-nginx:/etc/nginx:rw nginx
+
+ro 只要看见ro就说明这个路径只能通过宿主机操作，容器内部是无法操作！
+```
+
+
+
+
+
+## 7. DockerFile
+
+## 8. Docker网络
+
+
+
+
+
+弱小和无知不是生存的障碍，傲慢才是。
+
+
 

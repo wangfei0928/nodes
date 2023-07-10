@@ -844,11 +844,9 @@ docker run -d -p 3310:3306 -v /home/mysql/conf:/etc/mysql/conf.d -v /home/mysql/
 
 ### 具名挂载和匿名挂载
 
-匿名挂载： -v 后直接写容器内路径
-
 ```shell
 # 匿名挂载
--v 容器内路径！
+-v 容器内路径！       -v 后直接写容器内路径
 docker run -d -p --name nginx01 -v /etc/nginx nginx
 
 # 查看所有卷的情况
@@ -858,7 +856,7 @@ docker volume ls
 
 # 具名挂载
 a2006ca23ff80dd99855f53ae239f1e9b1ee070079bda2d03ade21be3bbd863d
- ⚡ root@VM-12-13-centos  /  docker run -d -P --name nginx002 -v juming-nginx:/etc/nginx nginx
+root@VM-12-13-centos  /  docker run -d -P --name nginx002 -v juming-nginx:/etc/nginx nginx
 6950de23be75a77fb315ea738a4b448bcd0618326fdcec7aabd4e54e9e3c4d59
  ⚡ root@VM-12-13-centos  /  docker volume ls                                                 
 DRIVER    VOLUME NAME
@@ -882,41 +880,208 @@ local     juming-nginx
 
 ```
 
-所有的docker容器内的卷，没有指定目录的情况下都是在/var/lib/docker/volumes/_data
+所有的docker容器内的卷，没有指定目录的情况下都是在`/var/lib/docker/volumes/_data`
 
 通过具名挂载可以方便我们找到这个卷。大多数情况使用具名挂载
 
+```shell
 如何确定是具名挂载还是匿名挂载，还是指定路径挂载！
 
 -v 容器内路径 		 # 匿名挂载
 -v 卷名:容器内路径		# 具名挂载
--v /宿主机路径:容器内路径  # 
-
-
-
-拓展
-
-```shell
-通过 -v 容器内路径:ro  rw可以改变我们的读写权限
-
-ro  readonly  # 只读
-rw  readwrite  # 可读可写 (默认)
-
-一旦设定这个容器的权限，容器对我们挂载出来的内容就是有权限了！
-
-docker run -d -P --name nginx02 -v juming-nginx:/etc/nginx:ro nginx
-docker run -d -P --name nginx02 -v juming-nginx:/etc/nginx:rw nginx
-
-ro 只要看见ro就说明这个路径只能通过宿主机操作，容器内部是无法操作！
+-v /宿主机路径:容器内路径  # 指定路径挂
 ```
 
 
 
 
 
-## 7. DockerFile
+拓展
 
-## 8. Docker网络
+```shell
+# 通过 -v 容器内路径:ro  rw可以改变我们的读写权限
+
+ro  readonly  # 只读
+rw  readwrite  # 可读可写 (默认)
+
+#一旦设定这个容器的权限，容器对我们挂载出来的内容就是有权限了！
+
+docker run -d -P --name nginx02 -v juming-nginx:/etc/nginx:ro nginx
+docker run -d -P --name nginx02 -v juming-nginx:/etc/nginx:rw nginx
+
+# ro 只要看见ro就说明这个路径只能通过宿主机操作，容器内部是无法操作！
+```
+
+### 初识DockerFile
+
+DockerFile就是用来构建docker镜像的构造文件！  其实是一个命令脚本
+
+通过这个脚本可以生成镜像，镜像是一层一层的，脚本一个个的命令，每个命令都是一层。
+
+#### 方式二：创建dockerfile文件挂载
+
+```shell
+# 创建一个dockerfile文件，名字可以随机，建议Dockerfile
+# 文件中的内容  指令（大写） 参数
+
+FROM centos
+
+VOLUME ["volume01","volume02"]
+
+CMD echo "---end---"
+CMD /bin/bash
+
+
+# 这里的每个命令都是镜像的一层。
+
+docker build -f dockerfile1 -t wangfei/centos .
+```
+
+![](./pic/QQ截图20230710103110.png)
+
+启动我们自己的镜像
+
+```shell
+docker run -it 容器id /bin/bash
+```
+
+![](./pic/QQ截图20230710103345.png)
+
+这两个目录一定与宿主机的目录有挂载，通过`docker inspect 容器id`命令，查看Mounts下的挂在情况。
+
+![](./pic/QQ截图20230710103858.png)
+
+
+
+这种方式未来使用的很多，因为我们通常会构建自己的镜像。
+
+假设构建镜像时没有挂载卷，要手动镜像挂载，-v卷名:容器内路径！
+
+
+
+### 数据卷容器
+
+
+
+![](./pic/4f05d3888bf9fd69b6bc55b972b8cfd1.png)
+
+- 父容器：A去挂载B，那么B就是A的父容器
+- 数据卷容器：被挂载的容器
+
+测试：
+
+```shell
+#1. 测试 启动3个容器，通过刚才自己写的镜像启动
+# 启动第一个centos，注意版本如果不写默认是找最新版
+[root@centos100 ~] docker run -it --name docker01 139235ade348
+[root@380f29a8d432 /]# ls -al
+total 0
+drwxr-xr-x.   1 root root  38 Jul 10 03:04 .
+drwxr-xr-x.   1 root root  38 Jul 10 03:04 ..
+-rwxr-xr-x.   1 root root   0 Jul 10 03:04 .dockerenv
+lrwxrwxrwx.   1 root root   7 Nov  3  2020 bin -> usr/bin
+drwxr-xr-x.   5 root root 360 Jul 10 03:04 dev
+drwxr-xr-x.   1 root root  66 Jul 10 03:04 etc
+drwxr-xr-x.   2 root root   6 Nov  3  2020 home
+lrwxrwxrwx.   1 root root   7 Nov  3  2020 lib -> usr/lib
+lrwxrwxrwx.   1 root root   9 Nov  3  2020 lib64 -> usr/lib64
+drwx------.   2 root root   6 Sep 15  2021 lost+found
+drwxr-xr-x.   2 root root   6 Nov  3  2020 media
+drwxr-xr-x.   2 root root   6 Nov  3  2020 mnt
+drwxr-xr-x.   2 root root   6 Nov  3  2020 opt
+dr-xr-xr-x. 144 root root   0 Jul 10 03:04 proc
+dr-xr-x---.   2 root root 162 Sep 15  2021 root
+drwxr-xr-x.  11 root root 163 Sep 15  2021 run
+lrwxrwxrwx.   1 root root   8 Nov  3  2020 sbin -> usr/sbin
+drwxr-xr-x.   2 root root   6 Nov  3  2020 srv
+dr-xr-xr-x.  13 root root   0 Jul 10 02:01 sys
+drwxrwxrwt.   7 root root 171 Sep 15  2021 tmp
+drwxr-xr-x.  12 root root 144 Sep 15  2021 usr
+drwxr-xr-x.  20 root root 262 Sep 15  2021 var
+
+# 容器数据卷在此
+drwxr-xr-x.   2 root root   6 Jul 10 03:04 volume01
+drwxr-xr-x.   2 root root   6 Jul 10 03:04 volume02
+
+#2. ctrl+p+q退出容器
+
+#3. 创建第二个容器docker02，继承docker01
+[root@centos100 ~] docker run -it --name docker02 --volumes-from docker01 139235ade348
+[root@df65778c4fb2 /]# ls -l
+total 0
+lrwxrwxrwx.   1 root root   7 Nov  3  2020 bin -> usr/bin
+drwxr-xr-x.   5 root root 360 Jul 10 03:09 dev
+drwxr-xr-x.   1 root root  66 Jul 10 03:09 etc
+drwxr-xr-x.   2 root root   6 Nov  3  2020 home
+lrwxrwxrwx.   1 root root   7 Nov  3  2020 lib -> usr/lib
+lrwxrwxrwx.   1 root root   9 Nov  3  2020 lib64 -> usr/lib64
+drwx------.   2 root root   6 Sep 15  2021 lost+found
+drwxr-xr-x.   2 root root   6 Nov  3  2020 media
+drwxr-xr-x.   2 root root   6 Nov  3  2020 mnt
+drwxr-xr-x.   2 root root   6 Nov  3  2020 opt
+dr-xr-xr-x. 150 root root   0 Jul 10 03:09 proc
+dr-xr-x---.   2 root root 162 Sep 15  2021 root
+drwxr-xr-x.  11 root root 163 Sep 15  2021 run
+lrwxrwxrwx.   1 root root   8 Nov  3  2020 sbin -> usr/sbin
+drwxr-xr-x.   2 root root   6 Nov  3  2020 srv
+dr-xr-xr-x.  13 root root   0 Jul 10 02:01 sys
+drwxrwxrwt.   7 root root 171 Sep 15  2021 tmp
+drwxr-xr-x.  12 root root 144 Sep 15  2021 usr
+drwxr-xr-x.  20 root root 262 Sep 15  2021 var
+# 容器docker02继承了dockers01
+drwxr-xr-x.   2 root root   6 Jul 10 03:04 volume01
+drwxr-xr-x.   2 root root   6 Jul 10 03:04 volume02
+
+
+#4. 在docker01中的volume01中创建文件，然后在docker02中的volume01中查看，如下图
+```
+
+![](./pic/QQ截图20230710112932.png)
+
+我们再创建第三个容器，挂载到第一个容器上，再创建一个docker03文件，发现docker01、dockers02都有该文件。
+
+![](./pic/QQ截图20230710114218.png)
+
+多个mysql实现数据共享
+
+````shell
+[root@iZ2zeg4ytp0whqtmxbsqiiZ home]# docker run -d -p 3344:3306 -v /etc/mysql/conf.d -v /var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 --name mysql01 mysql:5.7
+ 
+[root@iZ2zeg4ytp0whqtmxbsqiiZ home]# docker run -d -p 3344:3306 -v /etc/mysql/conf.d -v /var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 --name mysql02 --volumes-from mysql01 mysql:5.7
+````
+
+## 10. DockerFile
+
+dockerfile是用来构建docker镜像的文件。命令参数脚本！
+
+构建步骤：
+
+1. 编写一个dockerfile文件
+2. docker build 构建成为一个镜像
+3. docker run 运行容器
+4. docker push 发布镜像(DockerHub、阿里云镜像仓库)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+结论：
+
+容器之间配置信息的传递，数据卷容器的生命周期一直持续到没有容器为止。
+
+但是一旦持久化到了本地，本地的数据时不会删除的。
+
+## 11. Docker网络
 
 
 

@@ -1050,6 +1050,14 @@ drwxr-xr-x.   2 root root   6 Jul 10 03:04 volume02
 [root@iZ2zeg4ytp0whqtmxbsqiiZ home]# docker run -d -p 3344:3306 -v /etc/mysql/conf.d -v /var/lib/mysql -e MYSQL_ROOT_PASSWORD=123456 --name mysql02 --volumes-from mysql01 mysql:5.7
 ````
 
+
+
+结论：
+
+容器之间配置信息的传递，数据卷容器的生命周期一直持续到没有容器为止。
+
+但是一旦持久化到了本地，本地的数据时不会删除的。
+
 ## 10. DockerFile
 
 dockerfile是用来构建docker镜像的文件。命令参数脚本！
@@ -1061,25 +1069,201 @@ dockerfile是用来构建docker镜像的文件。命令参数脚本！
 3. docker run 运行容器
 4. docker push 发布镜像(DockerHub、阿里云镜像仓库)
 
+官方仓库搜索：https://hub.docker.com/_/centos
+
+
+
+基础知识：
+
+- 每个关键字（指令）必须是大写
+- 执行从上到下顺序执行
+- `#`表示注释
+- 每个指令都会创建一个新的镜像层
+
+![](./pic/902c47133f7a46b3bb4509f.png)
+
+
+
+dockerfile是面向开发的，我们以后要发布项目，做镜像就需要编写dockerfile文件，这个文件十分简单。
+
+
+
+```shell
+FROM        #指定基础镜像
+MAINTAINER  #镜像是谁写的，一般是加上姓名和邮箱
+RUN         #docker镜像构建的时候需要运行的命令
+ADD         #往镜像中添加内容
+WORKDIR     #镜像的工作目录
+VOLUME      #挂载的目录位置
+EXPOSE      #保留端口配置
+CMD         #指定这个容器启动的时候要运行的命令，只有最后一个会生效
+ENTRYPOINT  #指定这个容器启动的时候要运行的命令，可以追加命令
+ONBUILD     #当构建一个被继承dockerfile这个时候就会运行ONBUILD指令
+COPY        #类似add，将我们的文件拷贝到镜像中
+ENV         #构建的时候设置环境变量
+```
+
+### 实战测试
+
+Docker Hub中99%镜像都是从这个基础镜像过来的FROM scratch，然后配置需要的软件和配置来进行的构建
+
+![](./pic/QQ截图20230710235717.png)
+
+### 创建一个自己的centos
+
+1. 创建工作目录
+
+```shell
+[root@192 dockerfile]# pwd
+/home/dockerfile
+[root@192 dockerfile]# vim centos-dockerfile
+```
+
+2.  编写Dockerfile的文件
+
+```shell
+[root@centos100 dockerfile]# cat mydockerfile 
+FROM centos:7
+MAINTAINER wangfei<1583729316@qq.com>
+
+ENV MYPATH /user/local
+WORKDIR $MYPATH
+
+RUN yum -y install vim
+RUN yum -y install net-tools
+
+EXPOSE 80
+
+CMD echo $MYPATH
+CMD echo "---end---"
+CMD /bin/bash
+```
+
+3. 通过这个文件构建镜像
+
+```shell
+# 命令 docker build -f 文件路径 -t 镜像名:[tag] .
+docker build -f /home/dockerfile/mydockerfile  -t mycentos:0.1 .
+```
+
+4. 通过docker history
+
+```shell
+docker history 容器id
+```
+
+## 11. CMD 和 ENTRYPOINT区别
+
+- CMD : 指定这个容器启动的时候要运行的命令，只有最后一个会生效，可被替代。(替代的方式)
+- ENTRYPOINT : 指定这个容器启动的时候要运行的命令，可以追加命令。(追加的方式)
+
+### 测试cmd
+
+1. 编写dockerfile文件
+
+```shell
+[root@192 dockerfile]# cat dockerfile-test-cmd
+FROM centos
+CMD ["ls","-a"]
+```
+
+2. 构建镜像
+
+```shell
+docker build  -f dockerfile-test-cmd -t cmd-test:0.1 .
+```
+
+```shell
+[root@192 dockerfile]# docker build  -f dockerfile-test-cmd -t cmd-test:0.1 .
+Sending build context to Docker daemon  3.072kB
+Step 1/2 : FROM centos
+ ---> 5d0da3dc9764
+Step 2/2 : CMD ["ls","-a"]
+ ---> Running in 462edab225f4
+Removing intermediate container 462edab225f4
+ ---> 3a12f3d5b2a5
+Successfully built 3a12f3d5b2a5
+Successfully tagged cmd-test:0.1
+
+```
+
+3. 运行镜像
+
+```shell
+[root@192 dockerfile]# docker run cmd-test:0.1
+.
+..
+.dockerenv
+bin
+dev
+etc
+# .. 
+# 列出了 容器内 根目录所有文件夹
+
+```
+
+4. 想追加一个命令 -l 成为ls -al
+
+```shell
+docker run cmd-test:0.1 ls -al
+```
+
+```shell
+[root@192 ~]# docker run cmd-test:0.1 ls -al
+total 0
+drwxr-xr-x.   1 root root   6 Feb  2 13:53 .
+drwxr-xr-x.   1 root root   6 Feb  2 13:53 ..
+-rwxr-xr-x.   1 root root   0 Feb  2 13:53 .dockerenv
+lrwxrwxrwx.   1 root root   7 Nov  3  2020 bin -> usr/bin
+drwxr-xr-x.   5 root root 340 Feb  2 13:53 dev
+# ...
+```
+
+### 测试ENTRYPOINT
+
+1. 编写dockerfile文件
+
+```shell
+vim dockerfile-test-entrypoint
+FROM centos
+ENTRYPOINT ["ls","-a"]
+```
+
+2. 构建镜像
+
+```shell
+docker build  -f dockerfile-test-entrypoint -t entrypoint-test:0.1 .
+```
+
+```shell
+[root@192 dockerfile]# docker images
+REPOSITORY        TAG       IMAGE ID       CREATED         SIZE
+entrypoint-test   0.1       390f47c46bdd   9 seconds ago   231MB
+```
+
+3. 想追加一个命令 -l
+
+```shell
+docker run entrypoint-test:0.1 -l
+```
+
+成功
+
+```shell
+[root@192 dockerfile]# docker run entrypoint-test:0.1 -l
+total 0
+drwxr-xr-x.   1 root root   6 Feb  2 13:59 .
+drwxr-xr-x.   1 root root   6 Feb  2 13:59 ..
+-rwxr-xr-x.   1 root root   0 Feb  2 13:59 .dockerenv
+lrwxrwxrwx.   1 root root   7 Nov  3  2020 bin -> usr/bin
+# ...
+```
 
 
 
 
 
 
-
-
-
-
-
-
-
-
-结论：
-
-容器之间配置信息的传递，数据卷容器的生命周期一直持续到没有容器为止。
-
-但是一旦持久化到了本地，本地的数据时不会删除的。
 
 ## 11. Docker网络
 

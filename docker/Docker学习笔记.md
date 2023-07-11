@@ -732,13 +732,13 @@ docker run -it -v /home/ceshi:/home centos /bin/bash
 
 启动之后，可以通过`docker inspect 容器id`查看是否挂在成功。
 
-![](D:\笔记\docker\pic\QQ截图20230709222039.png)
+![](./pic/QQ截图20230709222039.png)
 
 
 
 同步的过程，双向绑定，测试文件的同步
 
-![](D:\笔记\docker\pic\QQ截图20230709222039.png)
+![](.\pic\QQ截图20230709222039.png)
 
 再来测试
 
@@ -747,7 +747,7 @@ docker run -it -v /home/ceshi:/home centos /bin/bash
 3. 启动容器
 4. 容器内的数据依旧是同步的
 
-![](D:\笔记\docker\pic\QQ截图20230709222746.png)
+![](.\pic\QQ截图20230709222746.png)
 
 好处：以后修改只需要在本地修改即可，容器内会自动同步。
 
@@ -796,11 +796,12 @@ docker run -d -p 3310:3306 -v /home/mysql/conf:/etc/mysql/conf.d -v /home/mysql/
 1. **查找大文件**：首先，通过使用 `du` 命令来查找占用较大空间的文件和目录。运行以下命令以按照文件大小的递减顺序列出文件和目录的大小：
 
    ```
+   bashCopy code
    du -h --max-depth=1 / | sort -hr
    ```
-   
+
    这将列出根文件系统中的文件和目录，按照大小的递减顺序显示。你可以查看列表并找出占用较大空间的文件或目录。
-   
+
 2. **删除不需要的文件**：根据上一步中找到的大文件或目录，确定哪些是不再需要的文件。使用 `rm` 命令来删除不需要的文件。请注意，在删除文件之前，确保你确定这些文件不再需要，并且它们不会对系统或应用程序造成影响。例如，可以使用以下命令删除单个文件：
 
    ```
@@ -1169,11 +1170,11 @@ CMD ["ls","-a"]
 2. 构建镜像
 
 ```shell
-docker build -f dockerfile-test-cmd -t cmd-test:0.1 .
+docker build  -f dockerfile-test-cmd -t cmd-test:0.1 .
 ```
 
 ```shell
-[root@192 dockerfile]# docker build -f dockerfile-test-cmd -t cmd-test:0.1 .
+[root@192 dockerfile]# docker build  -f dockerfile-test-cmd -t cmd-test:0.1 .
 Sending build context to Docker daemon  3.072kB
 Step 1/2 : FROM centos
  ---> 5d0da3dc9764
@@ -1215,11 +1216,8 @@ drwxr-xr-x.   1 root root   6 Feb  2 13:53 ..
 -rwxr-xr-x.   1 root root   0 Feb  2 13:53 .dockerenv
 lrwxrwxrwx.   1 root root   7 Nov  3  2020 bin -> usr/bin
 drwxr-xr-x.   5 root root 340 Feb  2 13:53 dev
-
-# 用cmd的情况下， -l 替换了CMD["ls","-a"]命令，-l不是命令，错译报错
+# ...
 ```
-
-
 
 ### 测试ENTRYPOINT
 
@@ -1261,163 +1259,17 @@ lrwxrwxrwx.   1 root root   7 Nov  3  2020 bin -> usr/bin
 # ...
 ```
 
-## 12. 实战：Tomcat镜像
-
-1. 准备镜像文件tomcat压缩包，jdk的压缩包
-
-   ![](./pic/QQ截图20230711111456.png)
-
-2. 编写dokcerfile文件，官方命名为`Dockerfile`,build会自动寻找这个文件，就不需要-f指定了
-
-   ```shell
-   FROM centos:7
-   MAINTAINER wangfei<1583729316@qq.com>
-   
-   COPY readme.txt /usr/local/readme.txt
-   
-   ADD jdk-8u161-linux-x64.tar.gz /usr/local/
-   ADD apache-tomcat-8.5.38.tar.gz /usr/local/
-   
-   RUN yum -y install vim
-   ENV MYPATH /usr/local
-   WORKDIR $MYPATH
-   
-   ENV JAVA_HOME /usr/local/jdk1.8.0_161
-   ENV CLASSPATH $JAVA_HOME/lib/lib/dt.jar:$JAVA_HOME/lib/tools.jar
-   ENV CATALINA_HOME /usr/local/apache-tomcat-8.5.38
-   ENV CATALINA_BASH /usr/local/apache-tomcat-8.5.38
-   ENV PATH $PATH:$JAVA_HOME/bin:$CATALINA_HOME/lib:$CATALINA_HOME/bin
-   
-   EXPOSE 8080
-   
-   CMD /usr/local/apache-tomcat-8.5.38/bin/startup.sh && tail -F /url/local/apache-tomcat-8.5.38/bin/logs/catalina.out构建镜像 
-   ```
-
-3. 构建镜像
-
-   ```shell
-   docker build -t diytomcat .
-   ```
-
-4. 启动镜像
-
-   ```shell
-   docker run -d -p 9090:8080 --name wangfeitomcat -v /home/wangfei/tomcat/test:/usr/local/apache-tomcat-8.5.38/webapps/test -v /home/wangfei/tomcat/tomcatlogs/:/usr/local/apache-tomcat-8.5.38/logs diytomcat
-   ```
-
-5. 进入容器
-
-   ```shell
-   docker exec -it 2c0632278163 /bin/bash
-   ```
-
-6. 测试访问
-
-   ![](./pic/QQ截图20230711113159.png)
-
-7. 发布项目
-
-   因为做了卷挂载，我们可以直接在本地编写项目就可以发布了
-
-   在本地编写web.xml和index.jsp进行测试
-
-![](./pic/QQ截图20230711115317.png)
-
-web.xml
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<web-app version="2.4" 
-    xmlns="http://java.sun.com/xml/ns/j2ee" 
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee 
-        http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd">       
-</web-app>
-```
-
-index.jsp
-
-```jsp
-<%@ page language="java" contentType="text/html; charset=UTF-8"
-    pageEncoding="UTF-8"%>
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>hello wf</title>
-</head>
-<body>
-Hello World!<br/>
-<%
-System.out.println("-----my test web logs------");
-%>
-</body>
-</html>
-```
-
-![](./pic/QQ截图20230711115434.png)
 
 
 
-## 13. 镜像上传到阿里云
-
-1. 登录阿里云
-2. 打开容器与镜像服务、选择个人版
-
-3. 创建命名空间
-
-4. 创建镜像仓库
-
-5. 在本地虚拟机上登录阿里云，根据操作指南操作
-
-   ```shell
-   # 1. 登录阿里云Docker Registry
-   $ docker login --username=土豆吃小鸡 registry.cn-qingdao.aliyuncs.com
-   # 用于登录的用户名为阿里云账号全名，密码为开通服务时设置的密码。
-   
-   # 您可以在访问凭证页面修改凭证密码。
-   
-   # 2. 从Registry中拉取镜像
-   $ docker pull registry.cn-qingdao.aliyuncs.com/wangfei0928-test/wangfei-test:[镜像版本号]
-   
-   # 3. 将镜像推送到Registry
-   $ docker login --username=土豆吃小鸡 registry.cn-qingdao.aliyuncs.com
-   $ docker tag [ImageId] registry.cn-qingdao.aliyuncs.com/wangfei0928-test/wangfei-test:[镜像版本号]
-   $ docker push registry.cn-qingdao.aliyuncs.com/wangfei0928-test/wangfei-test:[镜像版本号]
-   # 请根据实际镜像信息替换示例中的[ImageId]和[镜像版本号]参数。
-   ```
-
-## 14. Springboot微服务打包Docker镜像
-
-1. 构建springboot项目
-
-2. 打包应用
-
-3. 编写dockerfile
-
-   ```shell
-   FROM openjdk:8
-   
-   COPY *.jar /app.jar
-   
-   CMD ["--server.port=8080"]
-   
-   EXPOSE 8080
-   
-   ENTRYPOINT ["java","-jar","/app.jar"]
-   ```
-
-4. 构建镜像
-
-   ```shell
-   docker build -t wangfei-dockerdemo .
-   ```
-
-5. 发布运行
 
 
 
-## 14. Docker网络
+## 11. Docker网络
+
+
+
+
 
 弱小和无知不是生存的障碍，傲慢才是。
 
